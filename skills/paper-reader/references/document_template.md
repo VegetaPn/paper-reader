@@ -60,3 +60,12 @@ Before finalizing, verify:
 - [ ] Language and depth match the selected audience profile
 - [ ] All image paths are correct relative paths
 - [ ] The interpretation tells a coherent story, not a section-by-section summary
+
+## Document Updates from Follow-up Questions
+
+When updating the document based on user follow-up questions:
+
+- **Integrate, don't append** — Weave new content into the existing narrative. The document should read as a coherent whole, not show seams between "original" and "added" content.
+- **Preserve structure** — If the new content fits an existing section, expand it there. Only create a new section if the topic is genuinely distinct.
+- **Maintain voice** — Keep the same audience profile, language, and depth throughout. A follow-up answer inserted into the Programmer-profile document should still use code snippets and programming analogies.
+- **Update figures if needed** — If a follow-up requires showing a new figure or table from the paper, extract and embed it following the standard figure embedding format.

@@ -20,6 +20,7 @@ Detect the user's language from their first message. If the user writes in Chine
 4. Write interpretation → generate Markdown document per template
 5. Embed figures → reference all extracted images in the document
 6. Quality check → verify all images complete, structure correct
+7. Follow-up Q&A → update document with new insights
 ```
 
 ## Step 1: Confirm Audience & Create Output Directory
@@ -196,6 +197,36 @@ Run through this checklist before finalizing:
 - [ ] All image paths in the Markdown are correct relative paths
 
 If any image fails verification, re-crop from the source page with extended boundaries and re-verify.
+
+## Step 7: Follow-up Q&A — Update the Document
+
+After delivering the interpretation, the user may ask follow-up questions. **Always update the interpretation document** with your answers — don't let knowledge stay only in the conversation.
+
+### When to update
+
+Any follow-up that adds substantive knowledge about the paper:
+- Deeper explanation of a concept, method, or result
+- Clarification of something the user found confusing
+- Additional context or comparison the user asked about
+- Corrections to the original interpretation
+
+Do NOT update for meta-questions (e.g., "can you export this as PDF?", "where is the file saved?").
+
+### How to update
+
+1. **Answer the user** in the conversation first (so they get an immediate response)
+2. **Determine placement** — find the most relevant section in the existing document
+3. **Update the document** using the Edit tool:
+   - If the follow-up deepens an existing section → expand that section in-place
+   - If the follow-up covers a new topic → add a new subsection where it fits logically
+   - If the follow-up corrects an error → fix the original text directly
+4. **Notify the user** that the document has been updated, with a brief note on what changed
+
+### Writing style for updates
+
+- Integrate seamlessly — the updated document should read as if the content was always there, not as a patched-on Q&A appendix
+- Maintain the same audience profile and language as the original document
+- If the follow-up requires a new figure extraction, extract and embed it following Step 3
 
 ## Scripts
 
