@@ -130,6 +130,8 @@ This is a critical step. Every significant figure and table must be extracted.
 
 ### 3a. Render PDF pages to PNG
 
+`${CLAUDE_SKILL_DIR}` is the absolute path where this skill is installed — use it to locate bundled scripts.
+
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/render_pdf_pages.py <pdf_path> ./research/<name>/pages/ --dpi 300
 ```
