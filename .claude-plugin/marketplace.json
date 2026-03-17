@@ -1,0 +1,11 @@
+{
+  "name": "paper-reader",
+  "owner": { "name": "VegetaPn" },
+  "plugins": [
+    {
+      "name": "paper-reader",
+      "source": ".",
+      "description": "Deep paper interpretation with figure extraction, audience-aware explanations"
+    }
+  ]
+}
