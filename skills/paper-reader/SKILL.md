@@ -14,22 +14,46 @@ Detect the user's language from their first message. If the user writes in Chine
 ## Workflow
 
 ```
-1. Confirm audience → select interpretation strategy
-2. Read the PDF → understand structure and core contributions
-3. Extract figures → render pages + crop all figures/tables
-4. Write interpretation → generate Markdown document per template
-5. Embed figures → reference all extracted images in the document
-6. Quality check → verify all images complete, structure correct
-7. Follow-up Q&A → update document with new insights
+1. Quick scan the PDF → identify structure, key concepts, and prerequisites
+2. One-round dynamic profiling → ask audience background + paper-specific knowledge in a single AskUserQuestion
+3. Deep read the PDF → fully understand contributions with the reader profile in mind
+4. Extract figures → render pages + crop all figures/tables
+5. Write interpretation → generate Markdown document per template
+6. Embed figures → reference all extracted images in the document
+7. Quality check → verify all images complete, structure correct
+8. Follow-up Q&A → update document with new insights
 ```
 
-## Step 1: Confirm Audience & Create Output Directory
+## Step 1: Quick Scan the Paper & Create Output Directory
 
-Use two rounds of `AskUserQuestion` to build a complete reader profile.
+Read the PDF quickly (skim abstract, introduction, section headings, figure captions, conclusion) to extract:
 
-### Round 1: Select base profile
+1. **Paper topic & domain** — What field/subfield is this paper in?
+2. **Core method/technique** — What is the key approach (e.g., sparse attention, mixture of experts, RLHF, diffusion)?
+3. **Key prerequisite concepts** — What knowledge does a reader need to understand this paper? Extract 3-4 specific concepts that are central to this paper. These will become the knowledge-check options in Step 2.
 
-Adapt question text to the detected language. Examples below show both:
+Examples of extracted prerequisites by paper type:
+- A paper on FlashAttention → prerequisites: "GPU memory hierarchy / SRAM vs HBM", "Attention mechanism", "IO complexity analysis", "CUDA kernel programming"
+- A paper on MoE routing → prerequisites: "Mixture of Experts architecture", "Top-k gating / routing", "Load balancing in distributed systems", "Transformer architecture"
+- A paper on RLHF → prerequisites: "Reinforcement Learning basics (reward, policy)", "Language model fine-tuning", "Human preference modeling", "PPO algorithm"
+- A paper on visual generation → prerequisites: "Diffusion models / score matching", "VAE / latent space", "U-Net architecture", "CLIP / image-text alignment"
+
+Create output directory:
+
+```bash
+# Default: ./research/<paper-short-name>/
+mkdir -p ./research/<paper-short-name>/figures/
+```
+
+Use a short, descriptive name derived from the paper title (e.g., `attention-residuals`, `flash-attention-2`).
+
+## Step 2: Dynamic One-Round Profiling
+
+Use a single `AskUserQuestion` call with **two questions** to collect the reader's background and paper-specific knowledge simultaneously.
+
+### Question 1: Technical background (base profile)
+
+This is always the same 4 options:
 
 **Chinese:**
 ```
@@ -59,61 +83,52 @@ options:
     description: "High-level understanding; no code or math, pure analogies"
 ```
 
-### Round 2: Gather specific knowledge & skills
+### Question 2: Paper-specific knowledge (dynamically generated)
 
-After the user selects a base profile, ask a follow-up to collect their specific background. This helps tailor analogies, skip known concepts, and deep-dive where needed.
+Generate 3-4 options based on the **key prerequisite concepts extracted in Step 1**. Each option should name a specific concept/technique that is central to understanding THIS paper.
 
-**Chinese:**
+**Chinese template:**
 ```
-question: "您还掌握哪些相关知识或技术？（可多选，也可以在"其他"中自由补充）"
+question: "这篇论文涉及以下关键概念，您了解哪些？（可多选，也可以在"其他"中自由补充）"
 multiSelect: true
 options:
-  - label: "Transformer / Attention"
-    description: "了解自注意力机制、多头注意力、位置编码等"
-  - label: "分布式训练"
-    description: "了解数据并行、模型并行、Pipeline 并行等"
-  - label: "PyTorch / JAX"
-    description: "能读写训练代码，熟悉 autograd、模块化 API"
-  - label: "线性代数 / 优化理论"
-    description: "矩阵分解、梯度下降、收敛性分析等"
+  - label: "<Concept 1 from the paper>"
+    description: "<Brief description of what this concept entails>"
+  - label: "<Concept 2 from the paper>"
+    description: "<Brief description>"
+  - label: "<Concept 3 from the paper>"
+    description: "<Brief description>"
+  - label: "<Concept 4 from the paper>"   # optional, only if 4 distinct concepts
+    description: "<Brief description>"
 ```
 
-**English:**
+**English template:**
 ```
-question: "What specific knowledge or skills do you have? (Multi-select, or describe in 'Other')"
+question: "This paper involves the following key concepts. Which are you familiar with? (Multi-select, or describe in 'Other')"
 multiSelect: true
 options:
-  - label: "Transformer / Attention"
-    description: "Self-attention, multi-head attention, positional encoding, etc."
-  - label: "Distributed Training"
-    description: "Data parallel, model parallel, pipeline parallel, etc."
-  - label: "PyTorch / JAX"
-    description: "Can read/write training code, familiar with autograd"
-  - label: "Linear Algebra / Optimization"
-    description: "Matrix decomposition, gradient descent, convergence analysis"
+  - label: "<Concept 1>"
+    description: "<Brief description>"
+  - ...
 ```
 
-The user can also select "Other" to freely describe additional expertise (e.g., "做过 RLHF 微调", "familiar with FlashAttention", "了解 MoE 架构").
+**Guidelines for generating good options:**
+- Each option should be a **specific concept from this paper**, not a generic field (e.g., "FlashAttention's tiling strategy" not "machine learning")
+- Options should cover the **major prerequisites** — knowing which ones the user understands determines what needs extra explanation
+- Descriptions should be concrete enough for the user to honestly self-assess (e.g., "了解 KV Cache 的内存占用问题及其优化方法" not just "KV Cache")
+- The user can always select "Other" to add anything not listed
 
 ### How to use the collected profile
 
-Read [references/audience_profiles.md](references/audience_profiles.md) for the base strategy per profile, then adjust:
+Read [references/audience_profiles.md](references/audience_profiles.md) for the base strategy per profile, then adjust based on the paper-specific knowledge selections:
 
-- **Skip** concepts the user already knows (e.g., if they selected "Transformer / Attention", don't explain what attention is)
-- **Use their tech stack** in code examples (e.g., PyTorch vs JAX)
-- **Go deeper** on topics adjacent to their expertise (e.g., if they know distributed training, elaborate on pipeline parallel communication)
-- **Choose analogies** from their domain (e.g., for a programmer familiar with databases, compare attention to indexed lookups)
+- **Skip** concepts the user already knows (e.g., if they selected the attention mechanism option, don't explain what attention is — jump straight to what's new)
+- **Explain thoroughly** concepts the user did NOT select — these are the knowledge gaps to bridge
+- **Use their tech stack** in code examples (infer from base profile + any mentions in "Other")
+- **Go deeper** on topics adjacent to their selected expertise
+- **Choose analogies** from their domain
 
-Create output directory:
-
-```bash
-# Default: ./research/<paper-short-name>/
-mkdir -p ./research/<paper-short-name>/figures/
-```
-
-Use a short, descriptive name derived from the paper title (e.g., `attention-residuals`, `flash-attention-2`).
-
-## Step 2: Read the Paper
+## Step 3: Deep Read the Paper
 
 Read the PDF using the Read tool. For long papers (>10 pages), read in chunks using the `pages` parameter.
 
@@ -124,11 +139,11 @@ Build a mental map:
 - What experiments validate the approach?
 - What's the main insight/contribution?
 
-## Step 3: Extract All Figures and Tables
+## Step 4: Extract All Figures and Tables
 
 This is a critical step. Every significant figure and table must be extracted.
 
-### 3a. Render PDF pages to PNG
+### 4a. Render PDF pages to PNG
 
 `${CLAUDE_SKILL_DIR}` is the absolute path where this skill is installed — use it to locate bundled scripts.
 
@@ -140,11 +155,11 @@ If `pdftoppm` is not available, install it first:
 - macOS: `brew install poppler`
 - Ubuntu: `sudo apt-get install poppler-utils`
 
-### 3b. Identify figures by viewing rendered pages
+### 4b. Identify figures by viewing rendered pages
 
 Use the Read tool to view each rendered page image. Note the location of every figure and table.
 
-### 3c. Crop each figure
+### 4c. Crop each figure
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/crop_figure.py <page_image> <output_path> <left> <top> <right> <bottom>
@@ -156,7 +171,7 @@ Cropping guidelines:
 - **Always include the full figure caption** — extend bottom boundary generously
 - Use descriptive filenames: `fig1_architecture_overview.png`, `table2_model_configs.png`
 
-### 3d. Verify every cropped image
+### 4d. Verify every cropped image
 
 **Use the Read tool to view every cropped image.** Check for:
 - Caption text not truncated at the bottom
@@ -166,7 +181,7 @@ Cropping guidelines:
 
 If any image is incomplete, re-crop with extended boundaries. This is the most common error — always err on the side of larger crop regions.
 
-## Step 4: Write the Interpretation Document
+## Step 5: Write the Interpretation Document
 
 Read [references/document_template.md](references/document_template.md) for writing guidelines and the quality checklist.
 
@@ -174,7 +189,7 @@ Let the paper's content determine the document structure — a systems paper, a 
 
 Save as `./research/<name>/论文解读_<PaperTitle>.md`.
 
-## Step 5: Embed Figures
+## Step 6: Embed Figures
 
 Embed every extracted figure using this format:
 
@@ -187,7 +202,7 @@ Embed every extracted figure using this format:
 
 Place figures near the text that discusses them. Every figure and table in the paper should appear in the interpretation.
 
-## Step 6: Quality Check
+## Step 7: Quality Check
 
 Run through this checklist before finalizing:
 
@@ -200,7 +215,7 @@ Run through this checklist before finalizing:
 
 If any image fails verification, re-crop from the source page with extended boundaries and re-verify.
 
-## Step 7: Follow-up Q&A — Update the Document
+## Step 8: Follow-up Q&A — Update the Document
 
 After delivering the interpretation, the user may ask follow-up questions. **Always update the interpretation document** with your answers — don't let knowledge stay only in the conversation.
 
@@ -228,7 +243,7 @@ Do NOT update for meta-questions (e.g., "can you export this as PDF?", "where is
 
 - Integrate seamlessly — the updated document should read as if the content was always there, not as a patched-on Q&A appendix
 - Maintain the same audience profile and language as the original document
-- If the follow-up requires a new figure extraction, extract and embed it following Step 3
+- If the follow-up requires a new figure extraction, extract and embed it following Step 4
 
 ## Scripts
 
