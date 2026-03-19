@@ -7,7 +7,9 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that trans
 ## Features
 
 - **Audience-Aware** — Adapts depth and style based on your profile: Programmer, ML Practitioner, Researcher, or Non-technical
-- **Automatic Figure Extraction** — Renders PDF pages at 300 DPI and crops every figure and table at high resolution
+- **Smart Figure Extraction** — Uses pdfplumber to detect captions, renders only pages with figures, and auto-crops with heuristic boundary detection. Falls back to manual cropping when needed
+- **R2 Image Hosting** — Optionally uploads figures to Cloudflare R2 so documents can be shared with online images
+- **Context-Resilient** — Phased workflow with `progress.json` state persistence. Survives context compaction without losing progress
 - **Structured Output** — Generates a complete Markdown interpretation following a proven template (background, core method, experiments, takeaways)
 - **Bilingual** — Automatically detects your language (Chinese or English) and produces the entire document accordingly
 
@@ -17,6 +19,7 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that trans
 |------------|---------|-------------|
 | [Python 3](https://www.python.org/) | Run figure extraction scripts | Usually pre-installed |
 | [Pillow](https://python-pillow.org/) | Image cropping | `pip install Pillow` |
+| [pdfplumber](https://github.com/jsvine/pdfplumber) | Smart caption detection | `pip install pdfplumber` |
 | [Poppler](https://poppler.freedesktop.org/) | PDF-to-PNG rendering | macOS: `brew install poppler`<br>Ubuntu: `sudo apt-get install poppler-utils` |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Run the skill | `npm install -g @anthropic-ai/claude-code` |
 
@@ -69,11 +72,11 @@ claude --add-dir ~/tools/paper-reader
 
 ### Install system dependencies
 
-The skill uses two external tools for figure extraction. Install them once:
+The skill uses external tools for figure extraction. Install them once:
 
 ```bash
-# Python image library (required)
-pip install Pillow
+# Python libraries (required)
+pip install Pillow pdfplumber
 
 # PDF renderer (required)
 # macOS
@@ -96,29 +99,55 @@ Read this paper /path/to/paper.pdf
 
 ### Workflow
 
-1. **Choose your profile** — Claude asks about your technical background:
+The skill runs in three phases, each persisting state to `progress.json` so work survives context compaction:
+
+**Phase A — Scan & Profile**
+1. **Quick scan** — Claude skims the PDF to identify structure, domain, and prerequisites
+2. **Choose your profile** — Select your technical background:
    - **Programmer** — explanations use code snippets and programming analogies
    - **ML Practitioner** — focuses on implementation details, ablations, and training cost
    - **Researcher** — emphasizes theoretical novelty and connections to related work
    - **Non-technical** — pure analogies, no code or math
+3. **Knowledge check** — Multi-select concepts you already know. Claude skips what you know and dives deeper where it matters
 
-2. **Supplement your knowledge** — multi-select skills you already have (Transformer, distributed training, PyTorch, etc.). Claude skips what you know and dives deeper where it matters.
+**Phase B — Figure Extraction (automated)**
+4. **Smart extraction** — `extract_figures.py` scans the PDF with pdfplumber, detects all figure/table captions, renders only needed pages, and auto-crops each figure
+5. **Selective review** — Only low-confidence crops are manually verified; high-confidence ones pass through
+6. **R2 upload** (optional) — If configured, figures are uploaded to Cloudflare R2 for online sharing
 
-3. **Automatic interpretation** — Claude will:
-   - Read the full PDF
-   - Extract all figures and tables (high-res crops)
-   - Generate a structured Markdown interpretation
-   - Embed every figure in context
+**Phase C — Deep Read & Write**
+7. **Deep read** — Claude reads the full PDF in chunks, writing notes to `notes.md`
+8. **Interpretation** — Generates a structured Markdown document with all figures embedded
+9. **Quality check** — Verifies completeness and correctness
 
-4. **Output** — saved to:
-   ```
-   ./research/<paper-short-name>/
-   ├── 论文解读_<PaperTitle>.md   # interpretation document
-   └── figures/                    # extracted figures
-       ├── fig1_architecture.png
-       ├── fig2_results.png
-       └── ...
-   ```
+### Output
+
+```
+./research/<paper-short-name>/
+├── 论文解读_<PaperTitle>.md    # interpretation document
+├── progress.json               # workflow state (for recovery)
+├── notes.md                    # reading notes (for recovery)
+├── figures/
+│   ├── manifest.json           # figure metadata + R2 URLs
+│   ├── urls.json               # filename → URL mapping (if uploaded)
+│   ├── fig1_architecture.png
+│   ├── table2_results.png
+│   └── ...
+└── pages/                      # rendered PDF pages (only those with figures)
+    ├── page-01.png
+    └── ...
+```
+
+### R2 Image Hosting (Optional)
+
+To enable automatic figure upload to Cloudflare R2:
+
+```bash
+export R2_WORKER_URL=https://your-r2-worker.workers.dev
+export R2_API_KEY=your-api-key
+```
+
+Or create a `.env` file in your project root with these variables. When configured, the interpretation document will use online URLs instead of local paths, making it shareable without bundling image files.
 
 ### Trigger Keywords
 
@@ -137,6 +166,8 @@ paper-reader/
 │   └── paper-reader/
 │       ├── SKILL.md                  # Skill definition (Claude Code entry point)
 │       ├── scripts/
+│       │   ├── extract_figures.py    # Smart figure extraction (pdfplumber + pdftoppm + PIL)
+│       │   ├── upload_figures.py     # Upload figures to Cloudflare R2
 │       │   ├── render_pdf_pages.py   # Render PDF pages to PNG
 │       │   └── crop_figure.py        # Crop figures from page images
 │       └── references/
@@ -148,12 +179,41 @@ paper-reader/
 
 ### Scripts
 
-#### `skills/paper-reader/scripts/render_pdf_pages.py`
+#### `extract_figures.py` — Smart Figure Extraction
+
+Automatically detects and crops all figures, tables, and algorithms from a PDF.
+
+```bash
+python3 scripts/extract_figures.py <pdf_path> <output_dir> [--dpi 300]
+```
+
+How it works:
+1. Scans all pages with pdfplumber to find `Figure N |` / `Table N |` / `Algorithm N` captions
+2. Computes crop boundaries using heuristic rules (figures above captions, tables below captions)
+3. Renders **only pages that contain figures** via pdftoppm (not all pages)
+4. Crops each figure with safety margins and saves to `figures/`
+5. Generates `figures/manifest.json` with metadata for each figure
+
+#### `upload_figures.py` — R2 Image Upload
+
+Uploads extracted figures to Cloudflare R2 for online sharing.
+
+```bash
+python3 scripts/upload_figures.py <research_dir>
+```
+
+- Reads `figures/manifest.json` for the list of images
+- Uploads each to R2 at `papers/<name>/<filename>`
+- Writes `figures/urls.json` and adds `"url"` field to each manifest entry
+- Gracefully exits when R2 is not configured (exit code 0)
+- No pip dependencies (stdlib only)
+
+#### `render_pdf_pages.py` — PDF Page Renderer
 
 Renders each page of a PDF to a high-resolution PNG.
 
 ```bash
-python3 skills/paper-reader/scripts/render_pdf_pages.py <pdf_path> <output_dir> [--dpi 300] [--pages 1-5]
+python3 scripts/render_pdf_pages.py <pdf_path> <output_dir> [--dpi 300] [--pages 1-5]
 ```
 
 | Argument | Description |
@@ -163,12 +223,12 @@ python3 skills/paper-reader/scripts/render_pdf_pages.py <pdf_path> <output_dir> 
 | `--dpi` | Resolution, default 300 |
 | `--pages` | Page range, e.g. `1-5` or `3` |
 
-#### `skills/paper-reader/scripts/crop_figure.py`
+#### `crop_figure.py` — Manual Figure Cropping
 
-Crops a rectangular region from a rendered page image.
+Crops a rectangular region from a rendered page image. Used as fallback when auto-extraction misses a figure.
 
 ```bash
-python3 skills/paper-reader/scripts/crop_figure.py <page_image> <output_path> <left> <top> <right> <bottom>
+python3 scripts/crop_figure.py <page_image> <output_path> <left> <top> <right> <bottom>
 ```
 
 | Argument | Description |
@@ -205,6 +265,12 @@ brew install poppler
 sudo apt-get install poppler-utils
 ```
 
+**Q: `pdfplumber not installed`**
+
+```bash
+pip install pdfplumber
+```
+
 **Q: `Pillow not installed`**
 
 ```bash
@@ -213,11 +279,19 @@ pip install Pillow
 
 **Q: A figure is cropped incompletely**
 
-The automatic workflow verifies every image and re-crops with extended boundaries if truncation is detected. If running scripts manually, increase the `bottom` coordinate to include the full caption.
+The smart extraction uses conservative "crop large, not small" heuristics. If a crop is still incomplete, the workflow automatically falls back to manual verification and re-cropping. You can also run `crop_figure.py` directly with adjusted coordinates.
 
 **Q: How to change the output directory?**
 
 The default is `./research/<paper-short-name>/`. Tell Claude to use a different path when making your request.
+
+**Q: What happens when context gets too long?**
+
+The phased workflow saves progress to `progress.json`, reading notes to `notes.md`, and figure metadata to `manifest.json`. After context compaction, Claude reads these files and resumes from where it left off — no work is lost.
+
+**Q: How do I set up R2 image hosting?**
+
+See the [R2 Image Hosting](#r2-image-hosting-optional) section. You need a Cloudflare account with an R2 bucket and a Worker deployed. Set `R2_WORKER_URL` and `R2_API_KEY` environment variables.
 
 ## License
 
