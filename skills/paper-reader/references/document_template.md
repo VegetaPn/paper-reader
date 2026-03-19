@@ -38,8 +38,19 @@ Organize your sections around the answers. Skip sections that add no value for t
 
 ## Figure Embedding
 
-Every major figure and table from the paper should be extracted and embedded. Use this format:
+Every major figure and table from the paper should be extracted and embedded. Prefer online URLs when available so the document can be shared directly.
 
+Check each entry in `manifest.json` for a `"url"` field:
+
+**With R2 URL** (document is shareable online):
+```markdown
+> **Figure N: Descriptive Title**
+> Brief explanation of what the figure shows and the key takeaway.
+>
+> ![Figure N: Title](https://r2-imagebed.xxx.workers.dev/papers/xxx/figN.png)
+```
+
+**Without R2 URL** (local fallback):
 ```markdown
 > **Figure N: Descriptive Title**
 > Brief explanation of what the figure shows and the key takeaway.
@@ -48,7 +59,8 @@ Every major figure and table from the paper should be extracted and embedded. Us
 ```
 
 - Place figures near the text that discusses them
-- Use relative paths: `figures/fig1_descriptive_name.png`
+- If `manifest.json` entries have a `"url"` field, use that URL directly
+- Otherwise fall back to relative paths: `figures/fig1_descriptive_name.png`
 - Always include a brief description — don't just drop an image without context
 
 ## Quality Checklist
@@ -58,7 +70,7 @@ Before finalizing, verify:
 - [ ] All major figures and tables from the paper are extracted and embedded
 - [ ] Every embedded image is complete (captions not truncated, tables not cut off)
 - [ ] Language and depth match the selected audience profile
-- [ ] All image paths are correct relative paths
+- [ ] All image paths are correct (R2 URLs when available, relative paths otherwise)
 - [ ] The interpretation tells a coherent story, not a section-by-section summary
 
 ## Document Updates from Follow-up Questions
