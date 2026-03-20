@@ -385,43 +385,120 @@ def _find_upper_boundary(
     return None
 
 
+def _looks_like_table_data(text: str) -> bool:
+    """Heuristic: does this line look like a table data row?
+
+    Table data rows typically contain structured numeric values mixed with
+    text labels — e.g., "S2ORC_citations_abstracts 500,000 7.31B Scientific Literature".
+    Body paragraphs are continuous prose with very few standalone numbers.
+
+    We check for the presence of tabular numeric patterns: numbers with
+    commas (e.g., "500,000"), numbers with units (e.g., "7.31B", "4.70B"),
+    or sequences of numbers separated by whitespace.
+    """
+    # Count numeric-value patterns typical of table cells
+    # Matches: "500,000", "7.31B", "0.45B", "158.95B", "1.68B", plain numbers, etc.
+    numeric_patterns = re.findall(
+        r'\b\d[\d,]*\.?\d*[BKMGT]?\b', text, re.IGNORECASE
+    )
+    return len(numeric_patterns) >= 2  # tables usually have at least 2 numeric fields
+
+
 def _find_lower_boundary(
     caption: CaptionHit,
     page_captions: List[CaptionHit],
     page_lines: list,
 ) -> Optional[float]:
-    """Find the top-y of the text element just below this table content."""
-    candidates = []
+    """Find the top-y of the text element just below this table content.
 
-    # We need to skip a generous area below the caption first (the table itself)
-    # Then find the next paragraph text or section heading
+    Uses multi-signal detection with strong/weak candidate separation to
+    avoid truncating tables whose content rows contain high-alpha text
+    (e.g., description columns like "Scientific Literature").
+
+    Key insight: table data rows almost always contain structured numeric
+    values (counts, sizes, percentages), while body paragraphs do not.
+    Lines that look like table data are skipped even if they are long and
+    have high alpha ratios.
+
+    Strong signals (captions, section headings) are trusted immediately.
+    Weak signals (body-like text) require confirmation from the next line
+    to avoid mistaking a single descriptive table cell for a paragraph.
+    """
     min_table_height = 80  # minimum expected table height in PDF points
 
-    for line_text, line_top, line_bottom, line_x0 in page_lines:
-        if line_top > caption.y_bottom + min_table_height:
-            stripped = line_text.strip()
-            # Accept body text (paragraph-length lines)
-            if len(stripped) > 30:
-                # But skip lines that look like table data (short, numeric-heavy)
-                alpha_ratio = sum(1 for c in stripped if c.isalpha()) / max(len(stripped), 1)
-                if alpha_ratio > 0.4:
-                    candidates.append(line_top)
-            # Also accept section headings like "4.2 Results"
-            if re.match(r'^\d+[\.\s]', stripped) and len(stripped) > 5:
-                candidates.append(line_top)
-            # Or it's another caption
-            for pattern, _ in CAPTION_PATTERNS:
-                if re.match(pattern, stripped):
-                    candidates.append(line_top)
-                    break
+    strong_candidates: List[float] = []
+    weak_candidates: List[float] = []
 
-    # Also check for other captions below
+    # Pre-filter to lines below the table's minimum extent
+    lines_below = [
+        (text, top, bottom, x0)
+        for text, top, bottom, x0 in page_lines
+        if top > caption.y_bottom + min_table_height
+    ]
+
+    for i, (line_text, line_top, line_bottom, line_x0) in enumerate(lines_below):
+        stripped = line_text.strip()
+
+        # --- Strong signal: another figure/table/algorithm caption ---
+        is_caption = False
+        for pattern, _ in CAPTION_PATTERNS:
+            if re.match(pattern, stripped):
+                strong_candidates.append(line_top)
+                is_caption = True
+                break
+        if is_caption:
+            continue
+
+        # --- Strong signal: section heading (e.g., "3.2 Results") ---
+        if re.match(r'^\d+[\.\s]', stripped) and len(stripped) > 5:
+            strong_candidates.append(line_top)
+            continue
+
+        # --- Skip lines that look like table data rows ---
+        # Table rows contain structured numeric values; body text does not.
+        if _looks_like_table_data(stripped):
+            continue
+
+        # --- Weak signal: body-like paragraph text ---
+        # Stricter thresholds to avoid mistaking table description columns:
+        #   - Length > 50 chars (table cells rarely exceed this)
+        #   - Alpha ratio > 0.5 (body text is mostly words)
+        alpha_ratio = sum(1 for c in stripped if c.isalpha()) / max(len(stripped), 1)
+        if len(stripped) > 50 and alpha_ratio > 0.5:
+            # Require confirmation from the next line to reduce false positives.
+            # A real paragraph is followed by more text; a stray table row is not.
+            confirmed = False
+            if i + 1 < len(lines_below):
+                next_text = lines_below[i + 1][0].strip()
+                next_alpha = sum(1 for c in next_text if c.isalpha()) / max(len(next_text), 1)
+                # Next line also looks like body text (and NOT table data)
+                if (len(next_text) > 40 and next_alpha > 0.4
+                        and not _looks_like_table_data(next_text)):
+                    confirmed = True
+                # Next line is a caption → this line is definitely outside the table
+                for pattern, _ in CAPTION_PATTERNS:
+                    if re.match(pattern, next_text):
+                        confirmed = True
+                        break
+                # Next line is a section heading
+                if re.match(r'^\d+[\.\s]', next_text) and len(next_text) > 5:
+                    confirmed = True
+            else:
+                # Last text on the page and it looks like body text → accept
+                confirmed = True
+
+            if confirmed:
+                weak_candidates.append(line_top)
+
+    # Other captions on the same page (from the parsed caption list)
     for other_cap in page_captions:
         if other_cap is not caption and other_cap.y_top > caption.y_bottom + min_table_height:
-            candidates.append(other_cap.y_top)
+            strong_candidates.append(other_cap.y_top)
 
-    if candidates:
-        return min(candidates)  # closest below
+    # Prefer strong signals; fall back to weak ones
+    all_candidates = strong_candidates + weak_candidates
+    if all_candidates:
+        return min(all_candidates)  # closest below
     return None
 
 

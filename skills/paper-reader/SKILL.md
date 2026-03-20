@@ -229,11 +229,19 @@ If the total count seems low (the script may miss some figures), note which ones
 
 ### Step B3: Selective Verification
 
-**Only verify figures where `"needs_review": true`** in the manifest. For these:
+**For ALL tables** (regardless of `needs_review` flag):
+Tables are particularly prone to truncation because their content rows (especially description columns like "Task/Domain") can be mistaken for body text by the auto-cropper.
+
+1. Use the Read tool to view the cropped image
+2. Check: Is the **last row** of the table visible? Is there a clear bottom border or whitespace below the last data row?
+3. If the table appears truncated (content cut off at the bottom, missing rows), re-crop with expanded bounds
+
+**For figures/algorithms where `"needs_review": true`** in the manifest:
 
 1. Use the Read tool to view the cropped image
 2. Check: Is the full figure visible? Is the caption complete? Are there cut-off edges?
-3. If a crop is bad, re-crop manually using the existing crop_figure.py:
+
+**For any bad crops**, re-crop manually using the existing crop_figure.py:
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/crop_figure.py <page_image> <output_path> <left> <top> <right> <bottom>
