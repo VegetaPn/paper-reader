@@ -50,7 +50,9 @@ A3. Create output directory + write progress.json
 B1. Run extract_figures.py → auto-extract all figures/tables
 B2. Review manifest.json → check what was extracted
 B3. Selective verification → only review low-confidence crops
+B3.5. Run upload_figures.py → upload to R2 if configured (ALWAYS attempt)
 B4. Update progress.json → phase: "figures_done"
+B5. /compact → free context for Phase C (MANDATORY)
 
 C1. Deep read the PDF → build full understanding (chunked, 5 pages at a time)
 C2. Write notes.md → persist key insights (survives compact)
@@ -252,9 +254,11 @@ For any figures the script missed entirely:
 2. View the page with Read tool
 3. Crop manually with crop_figure.py
 
-### Step B3.5: Upload Figures to R2 (Optional)
+### Step B3.5: Upload Figures to R2 (Auto — runs if R2 is configured)
 
-If the user has configured R2 image hosting (environment variables `R2_WORKER_URL` and `R2_API_KEY`, or a `.env` file), automatically upload all extracted figures:
+**IMPORTANT: Always attempt this step.** Run the upload script unconditionally — it will detect whether R2 is configured and gracefully skip if not. Do NOT skip this step yourself.
+
+If R2 image hosting is configured (environment variables `R2_WORKER_URL` and `R2_API_KEY`, or a `.env` file), the script uploads all extracted figures:
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/upload_figures.py ./research/<name>/
@@ -277,6 +281,20 @@ Update `progress.json`:
   ...
 }
 ```
+
+### Step B5: Compact Before Phase C
+
+**MANDATORY**: After completing Phase B, you MUST run `/compact` before starting Phase C.
+
+Phase B (especially figure verification with image reads) consumes a large amount of context. Phase C (deep reading + writing) needs substantial context space for reading the full PDF and generating the interpretation document. Without compacting, the session will likely run out of context mid-Phase C, forcing a disruptive manual compact or auto-compact at a bad time.
+
+Run `/compact` with a focused instruction to preserve what matters:
+
+```
+/compact Preserve: paper_name, pdf_path, reader profile, knowledge_gaps, all figure filenames from manifest.json, and any figure issues found during verification. Discard: raw image data, intermediate crop attempts, tool error messages.
+```
+
+After compact completes, re-read `progress.json` and `manifest.json` to restore working state, then proceed to Phase C.
 
 ---
 
