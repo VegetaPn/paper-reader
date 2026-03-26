@@ -21,6 +21,7 @@ If you find yourself with limited conversation history (e.g., after auto-compact
 2. Read `progress.json` to determine:
    - `phase`: Which workflow phase was completed last
    - `pdf_path`: Where the source PDF is
+   - `source_url`: The original URL if the paper was downloaded (null if local file)
    - `paper_name`: The short name used for the output directory
    - `profile`: The reader's background selection
    - `knowledge_gaps`: Concepts the reader doesn't know (need extra explanation)
@@ -43,9 +44,10 @@ Phase C: Deep read + Write interpretation (main context usage)
 ```
 
 ```
+A0. Resolve input → if URL, download PDF; detect/reuse existing directory
 A1. Quick scan the PDF → identify structure, key concepts, prerequisites
 A2. One-round dynamic profiling → ask audience background + knowledge
-A3. Create output directory + write progress.json
+A3. Create output directory (if needed) + write progress.json
 
 B1. Run extract_figures.py → auto-extract all figures/tables
 B2. Review manifest.json → check what was extracted
@@ -66,7 +68,96 @@ C6. Follow-up Q&A → update document with new insights
 
 ## Phase A: Scan + User Profiling
 
-### Step A1: Quick Scan the Paper & Create Output Directory
+### Step A0: Resolve Input Source
+
+Before scanning, determine what the user provided and prepare the PDF file.
+
+#### If the user provides a URL (not a local file path):
+
+Download the PDF and save it locally. Common URL patterns:
+
+- **Direct PDF link** (e.g., `https://arxiv.org/pdf/2301.12345.pdf`):
+  ```bash
+  curl -L -o ./research/<paper-short-name>/paper.pdf "<url>"
+  ```
+
+- **arXiv abstract page** (e.g., `https://arxiv.org/abs/2301.12345`):
+  Convert to PDF URL by replacing `/abs/` with `/pdf/` and appending `.pdf`:
+  ```bash
+  curl -L -o ./research/<paper-short-name>/paper.pdf "https://arxiv.org/pdf/2301.12345.pdf"
+  ```
+
+- **Other paper hosting sites** (Semantic Scholar, OpenReview, ACL Anthology, etc.):
+  Use `curl -L` to follow redirects and download the PDF. If the URL is an HTML page, try to extract the actual PDF link first.
+
+- **Non-PDF URL** (e.g., HTML page of a blog post or paper summary):
+  Use `curl -L` to download the content. If it's HTML, save it as-is for reference. Try to find a linked PDF on the page.
+
+**Important**: Create a minimal directory first (just enough to save the PDF), then determine the proper short name after scanning. If needed, rename later.
+
+```bash
+# Temporary download — may rename directory after scanning
+mkdir -p ./research/tmp-download/
+curl -L -o ./research/tmp-download/paper.pdf "<url>"
+```
+
+After downloading, verify it's a valid PDF:
+```bash
+file ./research/tmp-download/paper.pdf
+```
+
+#### Fallback: Use `/web-access` or `/agent-browser` when `curl` fails
+
+If `curl` fails (e.g., 403 Forbidden, CAPTCHA, JavaScript-rendered page, requires login, or the downloaded file is not a valid PDF), use the `/web-access` or `/agent-browser` skill as a fallback:
+
+1. **Try `/web-access` first** — invoke it via the Skill tool to navigate to the URL, which can handle JavaScript rendering, anti-bot protections, and dynamic pages. Ask it to:
+   - Navigate to the paper URL
+   - Find and download the PDF file (look for download buttons, PDF links, etc.)
+   - Save the PDF to `./research/tmp-download/paper.pdf`
+
+2. **If `/web-access` also fails, try `/agent-browser`** — it provides full browser automation and can handle more complex scenarios like:
+   - Sites requiring cookie acceptance or CAPTCHA solving
+   - Multi-step navigation to reach the PDF (e.g., click "Download PDF" button)
+   - Pages that serve PDFs via JavaScript redirects
+
+3. **If the URL points to a non-PDF resource** (e.g., an HTML blog post, a conference talk page), use `/web-access` to fetch and save the page content as HTML/text for reference, then check if there's a linked PDF on the page.
+
+**Decision flow:**
+```
+curl -L → success + valid PDF? → done
+  ↓ fail
+/web-access → navigate + download PDF → success? → done
+  ↓ fail
+/agent-browser → full browser automation → success? → done
+  ↓ fail
+Ask user for alternative source or local file
+```
+
+Only ask the user for an alternative source after all automated methods have been exhausted.
+
+#### If the user provides a local file path:
+
+No download needed — just verify the file exists and is readable. Record the absolute path.
+
+#### Detect and reuse existing directory
+
+**IMPORTANT**: Before creating any new directory, check if the user has already created or specified a target directory:
+
+1. **User explicitly provides an output directory** (e.g., "save to ./research/my-paper/") → use that directory as-is. Only create `figures/` subdirectory if it doesn't exist.
+2. **User previously created a directory** for this paper (e.g., there's already a `./research/<name>/` with a `progress.json` or other files) → reuse it. Do NOT create a new directory with a different name.
+3. **Check for existing directories** before creating:
+   ```bash
+   ls ./research/ 2>/dev/null
+   ```
+   If a directory clearly matches the paper being analyzed (by name similarity or by containing a `progress.json` referencing the same PDF), reuse it.
+
+If a URL was downloaded to `./research/tmp-download/`, move the PDF to the final directory once the short name is determined:
+```bash
+mv ./research/tmp-download/paper.pdf ./research/<paper-short-name>/paper.pdf
+rmdir ./research/tmp-download/ 2>/dev/null
+```
+
+### Step A1: Quick Scan the Paper
 
 Read the PDF quickly (skim abstract, introduction, section headings, figure captions, conclusion) to extract:
 
@@ -80,14 +171,14 @@ Examples of extracted prerequisites by paper type:
 - A paper on RLHF → prerequisites: "Reinforcement Learning basics (reward, policy)", "Language model fine-tuning", "Human preference modeling", "PPO algorithm"
 - A paper on visual generation → prerequisites: "Diffusion models / score matching", "VAE / latent space", "U-Net architecture", "CLIP / image-text alignment"
 
-Create output directory:
+After scanning, determine the output directory:
 
 ```bash
-# Default: ./research/<paper-short-name>/
+# Only create if no existing directory is being reused (see Step A0)
 mkdir -p ./research/<paper-short-name>/figures/
 ```
 
-Use a short, descriptive name derived from the paper title (e.g., `attention-residuals`, `flash-attention-2`).
+Use a short, descriptive name derived from the paper title (e.g., `attention-residuals`, `flash-attention-2`). If the PDF was downloaded from a URL, move it from the temp location to this directory if not already done.
 
 ### Step A2: Dynamic One-Round Profiling
 
@@ -172,12 +263,19 @@ Read [references/audience_profiles.md](references/audience_profiles.md) for the 
 
 ### Step A3: Persist State
 
+Ensure the output directory and `figures/` subdirectory exist (skip if already present from Step A0):
+
+```bash
+mkdir -p ./research/<name>/figures/
+```
+
 Write `./research/<name>/progress.json`:
 
 ```json
 {
   "phase": "scan_done",
   "pdf_path": "<absolute path to PDF>",
+  "source_url": "<original URL if provided, null otherwise>",
   "paper_name": "<short-name>",
   "profile": "<selected profile>",
   "knowledge_gaps": ["<concept user did NOT select>", "..."],
