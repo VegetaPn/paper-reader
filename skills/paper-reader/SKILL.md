@@ -20,7 +20,7 @@ If you find yourself with limited conversation history (e.g., after auto-compact
 1. Look for `./research/*/progress.json` — this file tracks which phase you're in
 2. Read `progress.json` to determine:
    - `phase`: Which workflow phase was completed last
-   - `pdf_path`: Where the source PDF is
+   - `pdf_path`: Filename of the PDF saved in the research directory (always a local copy)
    - `source_url`: The original URL if the paper was downloaded (null if local file)
    - `paper_name`: The short name used for the output directory
    - `profile`: The reader's background selection
@@ -178,7 +178,30 @@ After scanning, determine the output directory:
 mkdir -p ./research/<paper-short-name>/figures/
 ```
 
-Use a short, descriptive name derived from the paper title (e.g., `attention-residuals`, `flash-attention-2`). If the PDF was downloaded from a URL, move it from the temp location to this directory if not already done.
+Use a short, descriptive name derived from the paper title (e.g., `attention-residuals`, `flash-attention-2`).
+
+#### Save the original PDF to the research directory
+
+**MANDATORY**: The original PDF must always be saved inside the research directory so the user has a permanent local copy alongside the interpretation. Use a descriptive filename with the arXiv ID or paper title.
+
+- **If downloaded from URL** → move/rename from temp location:
+  ```bash
+  mv ./research/tmp-download/paper.pdf ./research/<paper-short-name>/<PaperTitle>_<arXivID>.pdf
+  rmdir ./research/tmp-download/ 2>/dev/null
+  ```
+  Example: `./research/flash-attention/FlashAttention2_2307.08691.pdf`
+
+- **If user provided a local file path** → copy it into the research directory:
+  ```bash
+  cp <user-provided-path> ./research/<paper-short-name>/<PaperTitle>_<arXivID>.pdf
+  ```
+
+- **If downloaded to /tmp/** → copy it before it gets cleaned up:
+  ```bash
+  cp /tmp/<filename>.pdf ./research/<paper-short-name>/<PaperTitle>_<arXivID>.pdf
+  ```
+
+The saved PDF path should be recorded in `progress.json` as `pdf_path` (relative to the research directory).
 
 ### Step A2: Dynamic One-Round Profiling
 
@@ -274,7 +297,7 @@ Write `./research/<name>/progress.json`:
 ```json
 {
   "phase": "scan_done",
-  "pdf_path": "<absolute path to PDF>",
+  "pdf_path": "<filename of PDF saved in research dir, e.g. FlashAttention2_2307.08691.pdf>",
   "source_url": "<original URL if provided, null otherwise>",
   "paper_name": "<short-name>",
   "profile": "<selected profile>",
