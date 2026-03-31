@@ -63,6 +63,33 @@ Check each entry in `manifest.json` for a `"url"` field:
 - Otherwise fall back to relative paths: `figures/fig1_descriptive_name.png`
 - Always include a brief description — don't just drop an image without context
 
+## Source Attribution
+
+Anchor every key claim to the paper. Use inline references to help readers (and yourself) trace claims back to the source:
+
+- After numbers/results: "平均准确率 48.6%（Table 2）"
+- After method descriptions: "proposer 通过文件系统访问所有历史候选（Section 3, p.3）"
+- After quoting the paper's claims: "论文指出 harness 差异可产生 6× 的性能差距（Section 1, [47]）"
+
+This also serves as a self-check: **if you cannot point to a specific source for a claim, you may be hallucinating.**
+
+## Distinguishing Interpretation from Fact
+
+When adding your own analysis that goes beyond what the paper explicitly states, use clear markers:
+
+- *[解读者注]* for Chinese documents
+- *[Interpreter's note]* for English documents
+
+Examples of when to mark:
+- "This resembles X from another paper" → *[解读者注]* 这与 Y 论文中的 Z 方法类似
+- Speculation about why something works → *[解读者注]* 一个可能的解释是...
+- Implications the paper didn't discuss → *[解读者注]* 对从业者而言，这意味着...
+
+Examples of what does NOT need marking (these are factual descriptions):
+- Restating what a figure shows
+- Summarizing a table's numbers
+- Paraphrasing the paper's own explanation
+
 ## Quality Checklist
 
 Before finalizing, verify:
@@ -72,6 +99,9 @@ Before finalizing, verify:
 - [ ] Language and depth match the selected audience profile
 - [ ] All image paths are correct (R2 URLs when available, relative paths otherwise)
 - [ ] The interpretation tells a coherent story, not a section-by-section summary
+- [ ] **Factual grounding**: Every number and key claim has a source reference (Table N, Section N, p.N)
+- [ ] **No fabricated specifics**: No invented file names, concrete examples, variable names, or causal explanations absent from the paper
+- [ ] **Interpretation marked**: Your own commentary is distinguished from paper claims with *[解读者注]* or equivalent
 
 ## Document Updates from Follow-up Questions
 

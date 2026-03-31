@@ -159,11 +159,33 @@ rmdir ./research/tmp-download/ 2>/dev/null
 
 ### Step A1: Quick Scan the Paper
 
-Read the PDF quickly (skim abstract, introduction, section headings, figure captions, conclusion) to extract:
+#### ⚠️ ANTI-HALLUCINATION RULE
 
-1. **Paper topic & domain** — What field/subfield is this paper in?
-2. **Core method/technique** — What is the key approach (e.g., sparse attention, mixture of experts, RLHF, diffusion)?
-3. **Key prerequisite concepts** — What knowledge does a reader need to understand this paper? Extract 3-4 specific concepts that are central to this paper. These will become the knowledge-check options in Step A2.
+**NEVER summarize the paper based on the URL, the arXiv ID, or your training data.** You MUST base ALL descriptions of the paper (title, topic, method, summary) on text programmatically extracted from the actual PDF. If `extract_metadata.py` fails and you cannot extract text, tell the user instead of guessing.
+
+#### Step A1.1: Programmatic Metadata Extraction (MANDATORY — run BEFORE any PDF reading)
+
+```bash
+python3 <skill_base_dir>/scripts/extract_metadata.py <pdf_path> ./research/tmp-download/
+```
+
+This script uses pdfplumber to extract the **actual** title, authors, abstract, and section headings from the PDF. Its output is ground truth.
+
+After running, **immediately** read the output:
+
+```bash
+cat ./research/tmp-download/metadata.json
+```
+
+#### Step A1.2: Summarize Based on metadata.json ONLY
+
+Using the extracted `title`, `abstract`, and `section_headings` from `metadata.json`:
+
+1. **Paper topic & domain** — Determine from the abstract and section headings. Do NOT guess from the URL.
+2. **Core method/technique** — Identify from the abstract text.
+3. **Key prerequisite concepts** — Extract 3-4 specific concepts based on the abstract and headings. These will become the knowledge-check options in Step A2.
+
+**When presenting the paper summary to the user, you MUST quote or closely paraphrase the extracted title and abstract. Do NOT rephrase in a way that changes the paper's actual topic.**
 
 Examples of extracted prerequisites by paper type:
 - A paper on FlashAttention → prerequisites: "GPU memory hierarchy / SRAM vs HBM", "Attention mechanism", "IO complexity analysis", "CUDA kernel programming"
@@ -171,14 +193,16 @@ Examples of extracted prerequisites by paper type:
 - A paper on RLHF → prerequisites: "Reinforcement Learning basics (reward, policy)", "Language model fine-tuning", "Human preference modeling", "PPO algorithm"
 - A paper on visual generation → prerequisites: "Diffusion models / score matching", "VAE / latent space", "U-Net architecture", "CLIP / image-text alignment"
 
-After scanning, determine the output directory:
+#### Step A1.3: Determine Output Directory
+
+After confirming the paper title from metadata.json, determine the output directory:
 
 ```bash
 # Only create if no existing directory is being reused (see Step A0)
 mkdir -p ./research/<paper-short-name>/figures/
 ```
 
-Use a short, descriptive name derived from the paper title (e.g., `attention-residuals`, `flash-attention-2`).
+Use a short, descriptive name derived from the **extracted** paper title (e.g., `attention-residuals`, `flash-attention-2`). If the PDF was initially downloaded to `tmp-download/`, move both the PDF and `metadata.json` to the final directory.
 
 #### Save the original PDF to the research directory
 
@@ -300,10 +324,12 @@ Write `./research/<name>/progress.json`:
   "pdf_path": "<filename of PDF saved in research dir, e.g. FlashAttention2_2307.08691.pdf>",
   "source_url": "<original URL if provided, null otherwise>",
   "paper_name": "<short-name>",
+  "paper_title": "<exact title from metadata.json — this is the ground truth reference>",
   "profile": "<selected profile>",
   "knowledge_gaps": ["<concept user did NOT select>", "..."],
   "known_concepts": ["<concept user selected>", "..."],
   "figures_manifest": "figures/manifest.json",
+  "metadata_file": "metadata.json",
   "notes_file": "notes.md",
   "output_file": "论文解读_<PaperTitle>.md"
 }
@@ -466,6 +492,33 @@ Read [references/document_template.md](references/document_template.md) for writ
 
 Let the paper's content determine the document structure — a systems paper, a theory paper, and a survey paper should not look the same. Do not force every paper into the same section outline.
 
+#### ⚠️ WRITING-PHASE ANTI-HALLUCINATION RULES
+
+The most dangerous hallucinations are not inventing a wrong paper title (Phase A prevents that). They are **fabricating concrete details to fill in gaps** in the paper's description. Follow these rules strictly:
+
+1. **NEVER fabricate specific examples the paper didn't give.** If the paper says "the proposer compares candidates", do NOT invent a concrete example like "candidate A scored 14 on LawBench using method X...". Instead, describe the behavior in general terms, or quote the paper directly.
+
+2. **NEVER invent specific names, filenames, or structures the paper didn't mention.** If the paper says "stores code, scores, and traces in a filesystem", do NOT fabricate file names like `harness.py`, `scores.json`, `traces/`. Use the paper's own terms.
+
+3. **NEVER fill in details of a figure/table you haven't actually read.** If you describe what Figure 5 shows, you MUST have viewed the extracted image or read the caption text. Do not guess based on the figure's title alone.
+
+4. **Distinguish "paper says" from "I interpret".** When adding your own analysis, commentary, or connections to other work, use explicit markers like *[解读者注]* or "从这个结果可以推断..." to separate your interpretation from the paper's claims.
+
+5. **Numbers must come from the paper.** Every percentage, score, count, or comparison number in your interpretation must be traceable to a specific table, figure, or sentence in the PDF. Do not round, approximate, or "remember" numbers — re-read the source.
+
+6. **Do not over-specify model details.** If the paper says "we use Model X", do not add qualifiers (e.g., "with extended thinking", "version 3.5") unless the paper explicitly states them. Conversely, do not omit important qualifiers the paper does mention.
+
+7. **Do not fabricate motivation or causation.** If the paper shows a result but doesn't explain *why* it happened, do not invent a causal narrative. Say "the paper observes X but does not explain the mechanism" rather than fabricating an explanation.
+
+8. **Inline source references for every key claim.** This is the primary defense against hallucination during writing. Every number, result, and important factual claim in the interpretation MUST have an inline source reference pointing back to the paper:
+   - After numbers/results: "平均准确率 48.6%（Table 2）"
+   - After method claims: "proposer 通过文件系统检索信息（Section 3, p.3）"
+   - After the paper's own arguments: "论文指出 harness 差异可达 6× 性能差距（Section 1）"
+
+   **If you cannot cite a specific source for a claim, you are likely hallucinating — stop and re-read the PDF.**
+
+9. **Mark your own interpretation explicitly.** Use *[解读者注]* (Chinese) or *[Interpreter's note]* (English) to separate your commentary from the paper's claims. This includes: analogies to other work, speculation about why something works, implications the paper didn't discuss, and any limitations you infer but the paper didn't state.
+
 Save as `./research/<name>/论文解读_<PaperTitle>.md`.
 
 ### Step C4: Embed Figures
@@ -499,6 +552,10 @@ Run through this checklist before finalizing:
 - [ ] The interpretation tells a coherent story, not a section-by-section summary
 - [ ] Language and depth match the selected audience profile
 - [ ] All image paths in the Markdown are correct (R2 URLs if uploaded, relative paths otherwise)
+- [ ] **Factual accuracy**: Every number, percentage, and comparison is traceable to a specific table/figure/sentence in the PDF
+- [ ] **No fabricated details**: No invented file names, specific examples, variable names, or causal explanations that don't appear in the paper
+- [ ] **Source attribution**: Key claims are marked with page/section/table references (e.g., "(Section 3)", "(Table 2)", "(p.6)")
+- [ ] **Interpretation vs fact**: Your own analysis/commentary is clearly distinguished from the paper's claims (use markers like *[解读者注]*)
 - [ ] `progress.json` phase updated to `"writing_done"`
 
 Update `progress.json` phase to `"complete"`.
@@ -535,6 +592,7 @@ Do NOT update for meta-questions (e.g., "can you export this as PDF?", "where is
 
 ## Scripts
 
+- **`scripts/extract_metadata.py`** — **MUST run before any PDF reading in Step A1.** Extracts title, authors, abstract, and section headings from PDF using pdfplumber text extraction. Outputs `metadata.json` as ground truth to prevent hallucination. Run with `python3 ${CLAUDE_SKILL_DIR}/scripts/extract_metadata.py <pdf> <output_dir>`
 - **`scripts/extract_figures.py`** — Smart figure/table extraction. Scans PDF for captions with pdfplumber, renders only needed pages, auto-crops with heuristic boundaries, outputs manifest.json. Run with `python3 ${CLAUDE_SKILL_DIR}/scripts/extract_figures.py <pdf> <output_dir> [--dpi 300]`
 - **`scripts/upload_figures.py`** — Upload extracted figures to Cloudflare R2 image hosting. Reads manifest.json, uploads via R2 Worker, writes urls.json and updates manifest with URLs. No pip dependencies (stdlib only). Gracefully skips when R2 is not configured. Run with `python3 ${CLAUDE_SKILL_DIR}/scripts/upload_figures.py <research_dir>`
 - **`scripts/render_pdf_pages.py`** — Render PDF pages to high-res PNGs via pdftoppm. Run with `python3 ${CLAUDE_SKILL_DIR}/scripts/render_pdf_pages.py <pdf> <output_dir> [--dpi 300] [--pages 1-5]`
