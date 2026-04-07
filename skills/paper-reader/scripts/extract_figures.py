@@ -270,17 +270,20 @@ def compute_crop_regions(
             lower_bound = _find_lower_boundary(
                 cap, captions_by_page.get(cap.page_index, []),
                 page_text_blocks.get(cap.page_index, []),
+                pdf_path=pdf_path,
             )
             if lower_bound is not None:
-                crop_bottom = min(lower_bound + 5, page_h)
+                crop_bottom = min(lower_bound + 10, page_h)
                 confidence_note = "bounded by next text"
             else:
-                crop_bottom = min(cap.y_bottom + expand * 2, page_h)
+                # Be generous when no boundary is found — it's better to include
+                # extra whitespace than to truncate table content.
+                crop_bottom = min(cap.y_bottom + expand * 3, page_h)
                 needs_review = True
-                confidence_note = "no clear lower boundary, used page-bottom fallback"
+                confidence_note = "no clear lower boundary, used generous page-bottom fallback"
 
-            # Safety expansion
-            crop_bottom = min(crop_bottom + 20, page_h)
+            # Safety expansion (generous for tables — truncation is worse than extra space)
+            crop_bottom = min(crop_bottom + 40, page_h)
 
         else:
             # Generic fallback
@@ -404,30 +407,151 @@ def _looks_like_table_data(text: str) -> bool:
     return len(numeric_patterns) >= 2  # tables usually have at least 2 numeric fields
 
 
+def _looks_like_body_paragraph(
+    text: str,
+    next_texts: List[str],
+    min_consecutive: int = 3,
+) -> bool:
+    """Stricter body-paragraph detection requiring multiple consecutive prose lines.
+
+    The old approach checked a single line (len > 50, alpha > 0.5) with one-line
+    confirmation.  That misidentified text-heavy table cells (prompt templates,
+    method descriptions) as body text, truncating the table.
+
+    New approach: a line is body-paragraph only when at least `min_consecutive`
+    consecutive lines (including itself) all look like flowing prose.
+
+    Prose indicators (must satisfy ALL):
+      - Length > 60 chars (table cells are usually shorter per line)
+      - Starts with a lowercase letter or common sentence starters
+      - Does NOT start with a bullet, dash-list, bold marker, or pipe (table formatting)
+      - Alpha ratio > 0.55
+      - Not a caption line
+    """
+    def _is_prose_line(s: str) -> bool:
+        s = s.strip()
+        if len(s) < 40:
+            return False
+        # Table-like patterns: starts with pipe, bullet, bold, or very short "cells"
+        if re.match(r'^[\|•●▪◦\-\*]', s):
+            return False
+        # Caption line
+        for pattern, _ in CAPTION_PATTERNS:
+            if re.match(pattern, s):
+                return False
+        # Section heading
+        if re.match(r'^\d+[\.\s]', s) and len(s) < 80:
+            return False
+        alpha_ratio = sum(1 for c in s if c.isalpha()) / max(len(s), 1)
+        if alpha_ratio < 0.55:
+            return False
+        # Typical prose: starts with lowercase, or common sentence starters
+        # Table rows often start with a proper-noun label (e.g., "Backbone Instances")
+        # This is a soft signal — we rely on consecutive-line confirmation more.
+        return True
+
+    if not _is_prose_line(text):
+        return False
+
+    # Require min_consecutive - 1 additional consecutive prose lines after this one
+    consecutive = 1
+    for nt in next_texts:
+        if _is_prose_line(nt):
+            consecutive += 1
+            if consecutive >= min_consecutive:
+                return True
+        else:
+            break
+    return False
+
+
+def _detect_table_bottom_from_lines(
+    pdf_path: str,
+    page_index: int,
+    caption_y_bottom: float,
+    page_height: float,
+) -> Optional[float]:
+    """Use pdfplumber's line/rect detection to find the lowest horizontal
+    rule below a table caption — this is typically the table's bottom border.
+
+    Returns the y-coordinate (in PDF points) of the lowest horizontal line
+    that is below the caption and plausibly part of the table, or None if
+    no such line is found.
+    """
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            if page_index >= len(pdf.pages):
+                return None
+            page = pdf.pages[page_index]
+
+            # Collect horizontal lines from both explicit lines and rect edges
+            h_lines_y: List[float] = []
+
+            # 1. Explicit lines drawn on the page
+            for line in (page.lines or []):
+                y0, y1 = float(line.get("top", 0)), float(line.get("bottom", 0))
+                x0, x1 = float(line.get("x0", 0)), float(line.get("x1", 0))
+                # Horizontal if y-span is tiny and x-span is substantial
+                if abs(y1 - y0) < 3 and abs(x1 - x0) > page.width * 0.2:
+                    mid_y = (y0 + y1) / 2
+                    if mid_y > caption_y_bottom + 10:  # below caption
+                        h_lines_y.append(mid_y)
+
+            # 2. Rectangle edges (tables often drawn with rects)
+            for rect in (page.rects or []):
+                top_y = float(rect.get("top", 0))
+                bottom_y = float(rect.get("bottom", 0))
+                x0, x1 = float(rect.get("x0", 0)), float(rect.get("x1", 0))
+                width = abs(x1 - x0)
+                if width > page.width * 0.2:
+                    if bottom_y > caption_y_bottom + 10:
+                        h_lines_y.append(bottom_y)
+                    if top_y > caption_y_bottom + 10:
+                        h_lines_y.append(top_y)
+
+            if h_lines_y:
+                # Return the lowest horizontal line — the table's bottom border
+                return max(h_lines_y)
+    except Exception:
+        pass
+    return None
+
+
 def _find_lower_boundary(
     caption: CaptionHit,
     page_captions: List[CaptionHit],
     page_lines: list,
+    pdf_path: str = "",
 ) -> Optional[float]:
     """Find the top-y of the text element just below this table content.
 
-    Uses multi-signal detection with strong/weak candidate separation to
-    avoid truncating tables whose content rows contain high-alpha text
-    (e.g., description columns like "Scientific Literature").
-
-    Key insight: table data rows almost always contain structured numeric
-    values (counts, sizes, percentages), while body paragraphs do not.
-    Lines that look like table data are skipped even if they are long and
-    have high alpha ratios.
-
-    Strong signals (captions, section headings) are trusted immediately.
-    Weak signals (body-like text) require confirmation from the next line
-    to avoid mistaking a single descriptive table cell for a paragraph.
+    Uses a three-tier approach:
+      1. **Structural signals** (other captions, section headings) — always trusted.
+      2. **PDF line/rect detection** — pdfplumber can find the table's bottom
+         border line, giving a precise boundary.
+      3. **Body-paragraph detection** — requires 3+ consecutive prose lines to
+         confirm we've left the table, avoiding false positives on text-heavy
+         table cells (prompt templates, method descriptions, etc.).
     """
     min_table_height = 80  # minimum expected table height in PDF points
 
     strong_candidates: List[float] = []
+    line_based_candidates: List[float] = []
     weak_candidates: List[float] = []
+
+    # --- Signal 1: Other captions on the same page ---
+    for other_cap in page_captions:
+        if other_cap is not caption and other_cap.y_top > caption.y_bottom + min_table_height:
+            strong_candidates.append(other_cap.y_top)
+
+    # --- Signal 2: PDF line/rect detection for table bottom border ---
+    if pdf_path:
+        table_bottom = _detect_table_bottom_from_lines(
+            pdf_path, caption.page_index, caption.y_bottom, caption.page_height
+        )
+        if table_bottom is not None:
+            # Add some padding below the last line (for caption below table, etc.)
+            line_based_candidates.append(table_bottom + 15)
 
     # Pre-filter to lines below the table's minimum extent
     lines_below = [
@@ -455,50 +579,37 @@ def _find_lower_boundary(
             continue
 
         # --- Skip lines that look like table data rows ---
-        # Table rows contain structured numeric values; body text does not.
         if _looks_like_table_data(stripped):
             continue
 
-        # --- Weak signal: body-like paragraph text ---
-        # Stricter thresholds to avoid mistaking table description columns:
-        #   - Length > 50 chars (table cells rarely exceed this)
-        #   - Alpha ratio > 0.5 (body text is mostly words)
-        alpha_ratio = sum(1 for c in stripped if c.isalpha()) / max(len(stripped), 1)
-        if len(stripped) > 50 and alpha_ratio > 0.5:
-            # Require confirmation from the next line to reduce false positives.
-            # A real paragraph is followed by more text; a stray table row is not.
-            confirmed = False
-            if i + 1 < len(lines_below):
-                next_text = lines_below[i + 1][0].strip()
-                next_alpha = sum(1 for c in next_text if c.isalpha()) / max(len(next_text), 1)
-                # Next line also looks like body text (and NOT table data)
-                if (len(next_text) > 40 and next_alpha > 0.4
-                        and not _looks_like_table_data(next_text)):
-                    confirmed = True
-                # Next line is a caption → this line is definitely outside the table
-                for pattern, _ in CAPTION_PATTERNS:
-                    if re.match(pattern, next_text):
-                        confirmed = True
-                        break
-                # Next line is a section heading
-                if re.match(r'^\d+[\.\s]', next_text) and len(next_text) > 5:
-                    confirmed = True
-            else:
-                # Last text on the page and it looks like body text → accept
-                confirmed = True
+        # --- Weak signal: body-paragraph detection (strict, needs 3 consecutive) ---
+        next_texts = [lines_below[j][0] for j in range(i + 1, min(i + 4, len(lines_below)))]
+        if _looks_like_body_paragraph(stripped, next_texts, min_consecutive=3):
+            weak_candidates.append(line_top)
 
-            if confirmed:
-                weak_candidates.append(line_top)
+    # Priority: strong > line-based > weak
+    # For strong candidates, pick the closest below
+    if strong_candidates:
+        best_strong = min(strong_candidates)
+        # If we also have a line-based candidate, use the LARGER of the two
+        # (line-based may capture extra content that strong signals miss)
+        if line_based_candidates:
+            best_line = max(line_based_candidates)
+            # But don't go past the next structural element
+            return min(best_strong, max(best_strong, best_line))
+        return best_strong
 
-    # Other captions on the same page (from the parsed caption list)
-    for other_cap in page_captions:
-        if other_cap is not caption and other_cap.y_top > caption.y_bottom + min_table_height:
-            strong_candidates.append(other_cap.y_top)
+    if line_based_candidates:
+        best_line = max(line_based_candidates)
+        # If we also have weak (paragraph) signals, use the earlier one as a sanity check
+        if weak_candidates:
+            best_weak = min(weak_candidates)
+            return min(best_line, best_weak)
+        return best_line
 
-    # Prefer strong signals; fall back to weak ones
-    all_candidates = strong_candidates + weak_candidates
-    if all_candidates:
-        return min(all_candidates)  # closest below
+    if weak_candidates:
+        return min(weak_candidates)
+
     return None
 
 

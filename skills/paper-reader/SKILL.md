@@ -376,25 +376,47 @@ Check:
 
 If the total count seems low (the script may miss some figures), note which ones are missing.
 
-### Step B3: Selective Verification
+### Step B3: Verification — Tables First, Then Flagged Figures
 
-**For ALL tables** (regardless of `needs_review` flag):
-Tables are particularly prone to truncation because their content rows (especially description columns like "Task/Domain") can be mistaken for body text by the auto-cropper.
+Tables are the #1 source of cropping failures. The auto-cropper uses text heuristics to find table boundaries, but **text-heavy tables** (prompt templates, method descriptions, theoretical comparisons) have content that looks like body paragraphs, causing premature truncation.
 
-1. Use the Read tool to view the cropped image
-2. Check: Is the **last row** of the table visible? Is there a clear bottom border or whitespace below the last data row?
-3. If the table appears truncated (content cut off at the bottom, missing rows), re-crop with expanded bounds
+#### B3.1: Verify ALL tables (MANDATORY, every single one)
 
-**For figures/algorithms where `"needs_review": true`** in the manifest:
+For each table in the manifest:
 
+1. **Read the PDF first to know what to expect.** Before viewing the cropped image, read the page in the PDF where the table lives (use the `pages` parameter of the Read tool). Count the number of rows/columns the table should have. This gives you ground truth.
+
+2. **View the cropped image** with the Read tool.
+
+3. **Cross-check against the PDF:**
+   - Does the crop contain ALL rows from the PDF version?
+   - Is the caption complete (not cut off mid-sentence)?
+   - Is there content below the visible area that was cut off?
+   - For text-heavy tables (prompts, descriptions): is the last line of content visible?
+
+4. **If ANY content is missing**, re-crop with generous bounds:
+   ```bash
+   # First, render the full page if not already available
+   python3 ${CLAUDE_SKILL_DIR}/scripts/render_pdf_pages.py <pdf_path> ./research/<name>/pages/ --dpi 300 --pages <N>
+   # View the full page to find correct bounds
+   # Then crop with generous margins (better to have extra whitespace than truncation)
+   python3 ${CLAUDE_SKILL_DIR}/scripts/crop_figure.py <page_image> <output_path> <left> <top> <right> <bottom>
+   ```
+
+**Why tables fail:** The cropper's `_find_lower_boundary` tries to detect where the table ends by finding "body paragraph" text below it. But tables containing long descriptions, formulas, or prompt templates have content rows that resemble body text. The improved script uses PDF line/rect detection and requires 3+ consecutive prose lines for confirmation, but edge cases will always exist.
+
+#### B3.2: Verify flagged figures (`needs_review: true`)
+
+For figures/algorithms marked `needs_review`:
 1. Use the Read tool to view the cropped image
 2. Check: Is the full figure visible? Is the caption complete? Are there cut-off edges?
+3. Re-crop if needed using crop_figure.py
 
-**For any bad crops**, re-crop manually using the existing crop_figure.py:
+#### B3.3: Check for missing figures
 
-```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/crop_figure.py <page_image> <output_path> <left> <top> <right> <bottom>
-```
+Compare the manifest count against the expected total from the paper scan:
+- Missing figures usually happen when captions use unusual formatting (e.g., "Fig." vs "Figure", no colon/period after the number)
+- For missing figures: render the page, view it, crop manually
 
 For any figures the script missed entirely:
 1. Render the specific page: `python3 ${CLAUDE_SKILL_DIR}/scripts/render_pdf_pages.py <pdf_path> ./research/<name>/pages/ --dpi 300 --pages <N>`
