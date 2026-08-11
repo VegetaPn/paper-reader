@@ -510,9 +510,26 @@ Update `progress.json` phase to `"deep_read_done"` after completing the read.
 
 ### Step C3: Write the Interpretation Document
 
-Read [references/document_template.md](references/document_template.md) for writing guidelines and the quality checklist.
+Read [references/document_template.md](references/document_template.md) for writing guidelines and the quality checklist, and [references/writing_style.md](references/writing_style.md) for the anti-AI-flavor discipline (apply it while writing, not just at review). If the `writing-rigor` skill is installed, its references are the fuller version of the same discipline.
 
 Let the paper's content determine the document structure — a systems paper, a theory paper, and a survey paper should not look the same. Do not force every paper into the same section outline.
+
+#### ⚠️ CONTENT BALANCE RULE (CRITICAL)
+
+The interpretation must focus on **background, problem, and solution**. Evaluation/results are supporting evidence, not the main content.
+
+**Target proportions:**
+- Background + Problem: 25–30% — What landscape exists? What gaps? Why is the problem hard?
+- Solution / Method detail: 50–60% — How does it work? Design choices? What's novel vs prior art?
+- Results + Discussion: ≤20% — One compact summary (a single table or paragraph highlighting key takeaways). Do NOT enumerate every benchmark or embed every results table separately.
+
+**Anti-patterns to avoid:**
+- Embedding 5+ evaluation tables each with their own commentary paragraph ("results dumping")
+- Spending more words on "what scores were achieved" than on "how the method works"
+- Including case studies that only show "we got the right answer" without illuminating the method
+- Per-benchmark breakdowns that the reader could get by looking at the tables themselves
+
+**When to include a results figure/table:** Only when it directly illuminates a design decision (e.g., ablation showing why a component matters) or reveals something surprising about the method. A table that just says "we beat baselines" has no place in the main flow — mention the headline number in one sentence and move on.
 
 #### ⚠️ WRITING-PHASE ANTI-HALLUCINATION RULES
 
@@ -524,7 +541,7 @@ The most dangerous hallucinations are not inventing a wrong paper title (Phase A
 
 3. **NEVER fill in details of a figure/table you haven't actually read.** If you describe what Figure 5 shows, you MUST have viewed the extracted image or read the caption text. Do not guess based on the figure's title alone.
 
-4. **Distinguish "paper says" from "I interpret".** When adding your own analysis, commentary, or connections to other work, use explicit markers like *[解读者注]* or "从这个结果可以推断..." to separate your interpretation from the paper's claims.
+4. **Distinguish "paper says" from "I interpret" through prose, not tags.** When adding your own analysis, commentary, or connections to other work, signal it with natural language transitions: a separate paragraph beginning with phrases like "论文没展开这个机制，可能的原因是…", "我的理解是…", "从 Figure X 看…", "这是我用来理解的类比，不是论文的说法". Do NOT use bracketed prefix tags like `[解读者注]`, `[解读者展开]`, `[解读者类比]`, `[解读者推测]`, or bold labels like `**解读者注**：`. The same rule applies to English: avoid `[Interpreter's note]` style tags. The reader should be able to tell from sentence framing alone whether a paragraph is paraphrasing the paper or your commentary.
 
 5. **Numbers must come from the paper.** Every percentage, score, count, or comparison number in your interpretation must be traceable to a specific table, figure, or sentence in the PDF. Do not round, approximate, or "remember" numbers — re-read the source.
 
@@ -539,7 +556,9 @@ The most dangerous hallucinations are not inventing a wrong paper title (Phase A
 
    **If you cannot cite a specific source for a claim, you are likely hallucinating — stop and re-read the PDF.**
 
-9. **Mark your own interpretation explicitly.** Use *[解读者注]* (Chinese) or *[Interpreter's note]* (English) to separate your commentary from the paper's claims. This includes: analogies to other work, speculation about why something works, implications the paper didn't discuss, and any limitations you infer but the paper didn't state.
+9. **Signal your own interpretation through framing, not labels.** When you add analogies to other work, speculation about mechanisms, implications the paper didn't discuss, or limitations you infer, write the paragraph in a voice that makes the source-vs-interpretation distinction obvious without needing a tag. Useful framings: "论文没说为什么 X，但学习率小 + policy 渐进改进可以解释这个现象（这是我的解释）", "下面三点是我读完后觉得论文没展开的问题", "这是我用来帮助理解的类比", "我的疑问是 X". Do NOT pin a `[解读者注]` / `[Interpreter's note]` tag at the start of these paragraphs.
+
+10. **Suppress AI-flavor writing patterns.** Beyond source-grounding, the prose itself must not read as machine-generated. Avoid `→`/`——` as connectors, 「关键/本质/核心 insight」 clichés, 「招1招2」 subheadings, "下面从N个方面" / list-count previews, "X一变Y也跟着变" causal-chain templates, and more than ~2 bold spans per paragraph. The full pattern table and per-paragraph self-check are in [references/writing_style.md](references/writing_style.md) — run the self-check after each substantive paragraph. Also respect the user's stated scope (e.g. "只解读 RL 部分" / "简短补充") instead of expanding into adjacent content.
 
 Save as `./research/<name>/论文解读_<PaperTitle>.md`.
 
@@ -577,7 +596,8 @@ Run through this checklist before finalizing:
 - [ ] **Factual accuracy**: Every number, percentage, and comparison is traceable to a specific table/figure/sentence in the PDF
 - [ ] **No fabricated details**: No invented file names, specific examples, variable names, or causal explanations that don't appear in the paper
 - [ ] **Source attribution**: Key claims are marked with page/section/table references (e.g., "(Section 3)", "(Table 2)", "(p.6)")
-- [ ] **Interpretation vs fact**: Your own analysis/commentary is clearly distinguished from the paper's claims (use markers like *[解读者注]*)
+- [ ] **Interpretation vs fact**: Your own analysis/commentary is clearly distinguished from the paper's claims through prose framing (e.g. "论文没展开这个机制", "我的理解是", "这是我用来帮助理解的类比")—NOT through bracketed prefix tags like `[解读者注]` or `**解读者注**：`
+- [ ] **No AI flavor**: Ran the self-check in [references/writing_style.md](references/writing_style.md) — no `→`/`——` overuse, no 「关键/本质/核心」 clichés, no 「招1招2」 or list-count previews, ≤2 bold per paragraph, scope respected
 - [ ] `progress.json` phase updated to `"writing_done"`
 
 Update `progress.json` phase to `"complete"`.
@@ -610,6 +630,7 @@ Do NOT update for meta-questions (e.g., "can you export this as PDF?", "where is
 
 - Integrate seamlessly — the updated document should read as if the content was always there, not as a patched-on Q&A appendix
 - Maintain the same audience profile and language as the original document
+- Keep the anti-AI-flavor discipline from [references/writing_style.md](references/writing_style.md), and match the scope of the question: a "简短补充" gets 1-2 sentences, not three paragraphs. Don't revise adjacent content the user didn't ask about.
 - If the follow-up requires a new figure extraction, extract and embed it following Phase B steps
 
 ## Scripts
@@ -624,3 +645,4 @@ Do NOT update for meta-questions (e.g., "can you export this as PDF?", "where is
 
 - **`references/audience_profiles.md`** — Detailed interpretation strategies for each audience profile. Read after user selects their background.
 - **`references/document_template.md`** — Recommended Markdown structure for the interpretation document, with figure embedding guidelines.
+- **`references/writing_style.md`** — Anti-AI-flavor writing discipline (punctuation, template structures, clichés, source-vs-interpretation framing, scope). Read during Step C3 and run its self-check while writing.

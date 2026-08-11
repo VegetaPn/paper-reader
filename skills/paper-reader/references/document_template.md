@@ -22,6 +22,22 @@ Always start with basic metadata:
 4. **Show, don't just tell** — Use the paper's own figures, tables, and diagrams. Every major figure should appear in the interpretation near the text that discusses it.
 5. **Compare to what came before** — The reader needs an anchor. Show what the previous approach was and what changed.
 6. **Match the audience** — A programmer wants code snippets; a researcher wants theoretical grounding; a non-technical reader wants analogies. Let the reader profile drive every paragraph.
+7. **Avoid AI flavor** — Write like someone who actually understands the paper jotting it down, not like a generated summary. Suppress the default patterns (`→`/`——` as connectors, 「关键/本质/核心」 clichés, 「招1招2」 subheadings, list-count previews, bold pile-ups). See [writing_style.md](writing_style.md) and apply it throughout.
+
+## Content Balance (CRITICAL)
+
+The interpretation must focus on **background, problem definition, and solution mechanism**. Results/evaluation are supporting evidence, not the main content.
+
+**Target proportions:**
+- Background + Problem definition: 25–30% — What landscape does this paper enter? What specific gaps or limitations existed? Why is the problem hard?
+- Solution / Method in detail: 50–60% — How does it work? What are the design choices? What's novel compared to prior art? Write enough detail that the reader could explain the method to a colleague.
+- Results + Discussion: 15–20% — Compact summary of key findings with one table or paragraph. Highlight what the results reveal about the method's strengths/weaknesses. Do NOT enumerate every benchmark or embed every results table.
+
+**Anti-pattern: "results dumping"** — Listing benchmark after benchmark with separate figure embeds and per-table commentary. The reader can look at tables themselves; the interpretation's job is to help them understand the *method*, not reformat the leaderboard.
+
+**When to include a results table:** Only when it directly illuminates a design decision (e.g., an ablation showing why component X matters) or reveals a surprising insight about the method. Omit tables that just show "we beat baselines" without analytical value.
+
+**Case studies:** Include only when they help the reader understand how the method works in practice. Skip if they're just "look, we got the right answer."
 
 ## Structure
 
@@ -75,20 +91,16 @@ This also serves as a self-check: **if you cannot point to a specific source for
 
 ## Distinguishing Interpretation from Fact
 
-When adding your own analysis that goes beyond what the paper explicitly states, use clear markers:
+When adding your own analysis that goes beyond what the paper explicitly states, distinguish it through **prose framing, not bracketed tags**. Do NOT use `[解读者注]` / `[Interpreter's note]` style labels — they read like stickers and add AI flavor.
 
-- *[解读者注]* for Chinese documents
-- *[Interpreter's note]* for English documents
+Start the paragraph with a phrase that makes the source-vs-interpretation boundary audible:
+- "This resembles X from another paper" → 另起一段：「这与 Y 论文的 Z 方法类似，是我用来帮助理解的类比，不是论文的说法」
+- Speculation about why something works → 「论文没解释为什么，一个可能的解释是…（这是我的推测）」
+- Implications the paper didn't discuss → 「论文没展开，但对从业者而言这意味着…」
 
-Examples of when to mark:
-- "This resembles X from another paper" → *[解读者注]* 这与 Y 论文中的 Z 方法类似
-- Speculation about why something works → *[解读者注]* 一个可能的解释是...
-- Implications the paper didn't discuss → *[解读者注]* 对从业者而言，这意味着...
+Examples of what does NOT need framing (these are factual descriptions): restating what a figure shows, summarizing a table's numbers, paraphrasing the paper's own explanation.
 
-Examples of what does NOT need marking (these are factual descriptions):
-- Restating what a figure shows
-- Summarizing a table's numbers
-- Paraphrasing the paper's own explanation
+Full anti-AI-flavor discipline (punctuation, template structures, clichés, bold overuse, scope) is in [writing_style.md](writing_style.md). Apply it while writing.
 
 ## Quality Checklist
 
@@ -101,7 +113,8 @@ Before finalizing, verify:
 - [ ] The interpretation tells a coherent story, not a section-by-section summary
 - [ ] **Factual grounding**: Every number and key claim has a source reference (Table N, Section N, p.N)
 - [ ] **No fabricated specifics**: No invented file names, concrete examples, variable names, or causal explanations absent from the paper
-- [ ] **Interpretation marked**: Your own commentary is distinguished from paper claims with *[解读者注]* or equivalent
+- [ ] **Interpretation framed in prose**: Your own commentary is distinguished from paper claims through sentence framing (「我的理解是」「论文没展开」), NOT through `[解读者注]` / `[Interpreter's note]` tags
+- [ ] **No AI flavor**: Ran the self-check in [writing_style.md](writing_style.md) — no `→`/`——` overuse, no 「关键/本质/核心」 clichés, no 「招1招2」, no list-count previews, ≤2 bold per paragraph
 
 ## Document Updates from Follow-up Questions
 
