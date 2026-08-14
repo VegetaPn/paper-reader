@@ -23,6 +23,25 @@ Always start with basic metadata:
 5. **Compare to what came before** — The reader needs an anchor. Show what the previous approach was and what changed.
 6. **Match the audience** — A programmer wants code snippets; a researcher wants theoretical grounding; a non-technical reader wants analogies. Let the reader profile drive every paragraph.
 7. **Avoid AI flavor** — Write like someone who actually understands the paper jotting it down, not like a generated summary. Suppress the default patterns (`→`/`——` as connectors, 「关键/本质/核心」 clichés, 「招1招2」 subheadings, list-count previews, bold pile-ups). See [writing_style.md](writing_style.md) and apply it throughout.
+8. **Write formulas as LaTeX** — Use `$...$` for inline mathematical expressions and `$$...$$` for display equations. Never substitute inline code, fenced code blocks, ASCII equations, or Unicode pseudo-math.
+
+## Formula Formatting (MANDATORY)
+
+Every mathematical expression in the generated interpretation must use valid LaTeX, regardless of where it appears in the Markdown document.
+
+- Inline notation: `策略为 $\pi_\theta(a\mid s)$。`
+- Display equation:
+
+  ```markdown
+  $$
+  J(\theta)=\mathbb{E}_{\tau\sim\pi_\theta}\left[\sum_{t=0}^{T}\gamma^t r_t\right]
+  $$
+  ```
+
+- The fenced block above demonstrates the Markdown source only. In the interpretation itself, write the equation directly between `$$` delimiters, without a code fence.
+- Apply the same formatting inside prose, lists, tables, blockquotes, figure captions, and follow-up additions.
+- Backticks remain appropriate for literal code such as `value_head`, but mathematical objects such as $V_\theta(s)$ must use LaTeX.
+- If rendering support is uncertain, retain the LaTeX source and warn about viewer compatibility; do not downgrade the formula.
 
 ## Content Balance (CRITICAL)
 
@@ -113,6 +132,7 @@ Before finalizing, verify:
 - [ ] The interpretation tells a coherent story, not a section-by-section summary
 - [ ] **Factual grounding**: Every number and key claim has a source reference (Table N, Section N, p.N)
 - [ ] **No fabricated specifics**: No invented file names, concrete examples, variable names, or causal explanations absent from the paper
+- [ ] **LaTeX formulas**: Every mathematical expression uses `$...$` or `$$...$$`; none is written as inline code, a fenced code block, ASCII, or Unicode pseudo-math
 - [ ] **Interpretation framed in prose**: Your own commentary is distinguished from paper claims through sentence framing (「我的理解是」「论文没展开」), NOT through `[解读者注]` / `[Interpreter's note]` tags
 - [ ] **No AI flavor**: Ran the self-check in [writing_style.md](writing_style.md) — no `→`/`——` overuse, no 「关键/本质/核心」 clichés, no 「招1招2」, no list-count previews, ≤2 bold per paragraph
 
@@ -123,4 +143,5 @@ When updating the document based on user follow-up questions:
 - **Integrate, don't append** — Weave new content into the existing narrative. The document should read as a coherent whole, not show seams between "original" and "added" content.
 - **Preserve structure** — If the new content fits an existing section, expand it there. Only create a new section if the topic is genuinely distinct.
 - **Maintain voice** — Keep the same audience profile, language, and depth throughout. A follow-up answer inserted into the Programmer-profile document should still use code snippets and programming analogies.
+- **Preserve LaTeX formulas** — New or revised mathematical expressions must use `$...$` or `$$...$$`, never inline code or ASCII formatting.
 - **Update figures if needed** — If a follow-up requires showing a new figure or table from the paper, extract and embed it following the standard figure embedding format.

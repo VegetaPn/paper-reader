@@ -514,6 +514,19 @@ Read [references/document_template.md](references/document_template.md) for writ
 
 Let the paper's content determine the document structure — a systems paper, a theory paper, and a survey paper should not look the same. Do not force every paper into the same section outline.
 
+#### ⚠️ FORMULA FORMAT RULE (MANDATORY)
+
+Every mathematical expression in the interpretation document MUST use valid LaTeX notation. This keeps equations unambiguous and preserves a canonical Markdown source across renderers.
+
+- Use `$...$` for inline notation and short expressions.
+- Use `$$...$$` for standalone or multi-line equations.
+- Apply this rule everywhere in the document, including prose, lists, tables, blockquotes, figure captions, and content added during follow-up Q&A.
+- Do NOT write formulas as inline code, fenced code blocks, ASCII equations, or Unicode pseudo-math. Uncertain renderer support is not a reason to downgrade the source; keep the LaTeX and tell the user if their viewer may need math rendering support.
+- Use backticks only for literal code identifiers, filenames, commands, configuration keys, and code snippets—not for mathematical variables or equations.
+- Preserve the paper's notation and verify OCR-derived formulas against the PDF before transcribing them. Add a plain-language explanation around a formula when the audience profile needs it, but keep the formula itself in LaTeX.
+
+Examples: write `价值函数为 $V^\pi(s)$` and use a `$$...$$` block for the Bellman equation; never write `` `V(s) = E[...]` `` or place that equation in an ASCII code block.
+
 #### ⚠️ CONTENT BALANCE RULE (CRITICAL)
 
 The interpretation must focus on **background, problem, and solution**. Evaluation/results are supporting evidence, not the main content.
@@ -596,6 +609,7 @@ Run through this checklist before finalizing:
 - [ ] **Factual accuracy**: Every number, percentage, and comparison is traceable to a specific table/figure/sentence in the PDF
 - [ ] **No fabricated details**: No invented file names, specific examples, variable names, or causal explanations that don't appear in the paper
 - [ ] **Source attribution**: Key claims are marked with page/section/table references (e.g., "(Section 3)", "(Table 2)", "(p.6)")
+- [ ] **Formula format**: Every mathematical expression uses valid LaTeX (`$...$` inline or `$$...$$` display); no formula is written as inline code, a fenced code block, ASCII, or Unicode pseudo-math
 - [ ] **Interpretation vs fact**: Your own analysis/commentary is clearly distinguished from the paper's claims through prose framing (e.g. "论文没展开这个机制", "我的理解是", "这是我用来帮助理解的类比")—NOT through bracketed prefix tags like `[解读者注]` or `**解读者注**：`
 - [ ] **No AI flavor**: Ran the self-check in [references/writing_style.md](references/writing_style.md) — no `→`/`——` overuse, no 「关键/本质/核心」 clichés, no 「招1招2」 or list-count previews, ≤2 bold per paragraph, scope respected
 - [ ] `progress.json` phase updated to `"writing_done"`
@@ -631,6 +645,7 @@ Do NOT update for meta-questions (e.g., "can you export this as PDF?", "where is
 - Integrate seamlessly — the updated document should read as if the content was always there, not as a patched-on Q&A appendix
 - Maintain the same audience profile and language as the original document
 - Keep the anti-AI-flavor discipline from [references/writing_style.md](references/writing_style.md), and match the scope of the question: a "简短补充" gets 1-2 sentences, not three paragraphs. Don't revise adjacent content the user didn't ask about.
+- Keep every mathematical expression in LaTeX (`$...$` or `$$...$$`); do not introduce code-formatted or ASCII formulas during follow-up edits
 - If the follow-up requires a new figure extraction, extract and embed it following Phase B steps
 
 ## Scripts
@@ -644,5 +659,5 @@ Do NOT update for meta-questions (e.g., "can you export this as PDF?", "where is
 ## References
 
 - **`references/audience_profiles.md`** — Detailed interpretation strategies for each audience profile. Read after user selects their background.
-- **`references/document_template.md`** — Recommended Markdown structure for the interpretation document, with figure embedding guidelines.
-- **`references/writing_style.md`** — Anti-AI-flavor writing discipline (punctuation, template structures, clichés, source-vs-interpretation framing, scope). Read during Step C3 and run its self-check while writing.
+- **`references/document_template.md`** — Recommended Markdown structure for the interpretation document, including mandatory LaTeX formula formatting and figure embedding guidelines.
+- **`references/writing_style.md`** — Anti-AI-flavor writing discipline plus mandatory LaTeX formula formatting (punctuation, template structures, clichés, source-vs-interpretation framing, scope). Read during Step C3 and run its self-check while writing.
